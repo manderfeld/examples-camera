@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from gi.repository import GLib, GObject, Gst, GstBase, Gtk
 import sys
 import svgwrite
 import threading
@@ -20,10 +21,10 @@ import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GstBase', '1.0')
 gi.require_version('Gtk', '3.0')
-from gi.repository import GLib, GObject, Gst, GstBase, Gtk
 
 GObject.threads_init()
 Gst.init(None)
+
 
 class GstPipeline:
     def __init__(self, pipeline, user_function, src_size):
@@ -59,7 +60,7 @@ class GstPipeline:
         self.pipeline.set_state(Gst.State.PLAYING)
         try:
             Gtk.main()
-        except:
+        except BaseException:
             pass
 
         # Clean up.
@@ -103,12 +104,15 @@ class GstPipeline:
             assert glbox or box
             assert self.sink_size
             if glbox:
-                self.box = (glbox.get_property('x'), glbox.get_property('y'),
-                        glbox.get_property('width'), glbox.get_property('height'))
+                self.box = (
+                    glbox.get_property('x'),
+                    glbox.get_property('y'),
+                    glbox.get_property('width'),
+                    glbox.get_property('height'))
             else:
                 self.box = (-box.get_property('left'), -box.get_property('top'),
-                    self.sink_size[0] + box.get_property('left') + box.get_property('right'),
-                    self.sink_size[1] + box.get_property('top') + box.get_property('bottom'))
+                            self.sink_size[0] + box.get_property('left') + box.get_property('right'),
+                            self.sink_size[1] + box.get_property('top') + box.get_property('bottom'))
         return self.box
 
     def inference_loop(self):
@@ -127,7 +131,8 @@ class GstPipeline:
             # This requires a recent version of the python3-edgetpu package. If this
             # raises an exception please make sure dependencies are up to date.
             input_tensor = gstbuffer
-            svg = self.user_function(input_tensor, self.src_size, self.get_box())
+            svg = self.user_function(
+                input_tensor, self.src_size, self.get_box())
             if svg:
                 if self.overlay:
                     self.overlay.set_property('data', svg)
@@ -135,7 +140,8 @@ class GstPipeline:
                     self.overlaysink.set_property('svg', svg)
 
     def setup_window(self):
-        # Only set up our own window if we have Coral overlay sink in the pipeline.
+        # Only set up our own window if we have Coral overlay sink in the
+        # pipeline.
         if not self.overlaysink:
             return
 
@@ -150,8 +156,11 @@ class GstPipeline:
         # Needed to account for window chrome etc.
         def on_widget_configure(widget, event, overlaysink):
             allocation = widget.get_allocation()
-            overlaysink.set_render_rectangle(allocation.x, allocation.y,
-                    allocation.width, allocation.height)
+            overlaysink.set_render_rectangle(
+                allocation.x,
+                allocation.y,
+                allocation.width,
+                allocation.height)
             return False
 
         window = Gtk.Window(Gtk.WindowType.TOPLEVEL)
@@ -171,7 +180,10 @@ class GstPipeline:
         wl_display = self.overlaysink.get_default_wayland_display_context()
         self.overlaysink.set_context(wl_display)
 
-        drawing_area.connect('configure-event', on_widget_configure, self.overlaysink)
+        drawing_area.connect(
+            'configure-event',
+            on_widget_configure,
+            self.overlaysink)
         window.connect('delete-event', Gtk.main_quit)
         window.show_all()
 
@@ -182,27 +194,33 @@ class GstPipeline:
             if message.type == Gst.MessageType.NEED_CONTEXT:
                 _, context_type = message.parse_context_type()
                 if context_type == GstGL.GL_DISPLAY_CONTEXT_TYPE:
-                    sinkelement = overlaysink.get_by_interface(GstVideo.VideoOverlay)
+                    sinkelement = overlaysink.get_by_interface(
+                        GstVideo.VideoOverlay)
                     gl_context = sinkelement.get_property('context')
                     if gl_context:
-                        display_context = Gst.Context.new(GstGL.GL_DISPLAY_CONTEXT_TYPE, True)
-                        GstGL.context_set_gl_display(display_context, gl_context.get_display())
+                        display_context = Gst.Context.new(
+                            GstGL.GL_DISPLAY_CONTEXT_TYPE, True)
+                        GstGL.context_set_gl_display(
+                            display_context, gl_context.get_display())
                         message.src.set_context(display_context)
             return Gst.BusSyncReply.PASS
 
         bus = self.pipeline.get_bus()
         bus.set_sync_handler(on_bus_message_sync, self.overlaysink)
 
+
 def detectCoralDevBoard():
-  try:
-    if 'MX8MQ' in open('/sys/firmware/devicetree/base/model').read():
-      print('Detected Edge TPU dev board.')
-      return True
-  except: pass
-  return False
+    try:
+        if 'MX8MQ' in open('/sys/firmware/devicetree/base/model').read():
+            print('Detected Edge TPU dev board.')
+            return True
+    except BaseException:
+        pass
+    return False
+
 
 def run_pipeline(user_function, appsink_size):
-    # For default camera (Coral Camera w/ Dev Board):
+        # For default camera (Coral Camera w/ Dev Board):
     PIPELINE = 'v4l2src device=/dev/video0 ! {src_caps}'
     # For alternative camera (USB camera w/ Dev Board):
     #PIPELINE = 'v4l2src device=/dev/video1 ! {src_caps}'
@@ -216,9 +234,14 @@ def run_pipeline(user_function, appsink_size):
         """
     else:
         src_size = (640, 480)
-        scale = min(appsink_size[0] / src_size[0], appsink_size[1] / src_size[1])
+        scale = min(
+            appsink_size[0] /
+            src_size[0],
+            appsink_size[1] /
+            src_size[1])
         scale = tuple(int(x * scale) for x in src_size)
-        scale_caps = 'video/x-raw,width={width},height={height}'.format(width=scale[0], height=scale[1])
+        scale_caps = 'video/x-raw,width={width},height={height}'.format(
+            width=scale[0], height=scale[1])
         PIPELINE += """ ! tee name=t
             t. ! {leaky_q} ! videoconvert ! videoscale ! {scale_caps} ! videobox name=box autocrop=true
                ! {sink_caps} ! {sink_element}
@@ -232,9 +255,12 @@ def run_pipeline(user_function, appsink_size):
 
     src_caps = SRC_CAPS.format(width=src_size[0], height=src_size[1])
     sink_caps = SINK_CAPS.format(width=appsink_size[0], height=appsink_size[1])
-    pipeline = PIPELINE.format(leaky_q=LEAKY_Q,
-        src_caps=src_caps, sink_caps=sink_caps,
-        sink_element=SINK_ELEMENT, scale_caps=scale_caps)
+    pipeline = PIPELINE.format(
+        leaky_q=LEAKY_Q,
+        src_caps=src_caps,
+        sink_caps=sink_caps,
+        sink_element=SINK_ELEMENT,
+        scale_caps=scale_caps)
 
     print('Gstreamer pipeline:\n', pipeline)
 
