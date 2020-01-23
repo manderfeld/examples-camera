@@ -223,7 +223,7 @@ def run_pipeline(user_function, appsink_size):
             t. ! {leaky_q} ! videoconvert ! videoscale ! {scale_caps} ! videobox name=box autocrop=true
                ! {sink_caps} ! {sink_element}
             t. ! {leaky_q} ! videoconvert
-               ! rsvgoverlay name=overlay ! videoconvert ! ximagesink sync=false
+               ! rsvgoverlay name=overlay ! gamma gamma=2.0 ! videoconvert ! ximagesink sync=false
             """
 
     SINK_ELEMENT = 'appsink name=appsink emit-signals=true max-buffers=1 drop=true'
